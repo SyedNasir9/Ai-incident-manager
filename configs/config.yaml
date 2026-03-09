@@ -1,0 +1,9 @@
+server:
+  port: 8081
+
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: "starnasir9"
+  dbname: incidentdb
