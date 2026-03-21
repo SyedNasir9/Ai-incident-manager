@@ -7,7 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/google/uuid"
 
+	"github.com/syednasir/ai-incident-manager/internal/ai"
 	"github.com/syednasir/ai-incident-manager/internal/observability"
 	"github.com/syednasir/ai-incident-manager/internal/storage"
 	"github.com/syednasir/ai-incident-manager/internal/timeline"
@@ -59,30 +61,66 @@ func handleAlertWebhook(c *gin.Context, db *pgxpool.Pool) {
 		log.Printf("observability collection failed: %v", err)
 	} else {
 		tl := timeline.BuildTimeline(*signals)
+		ctx := c.Request.Context()
 
 		// Persist timeline and observability data for this incident.
-		if err := storage.SaveTimeline(c.Request.Context(), db, incident.ID, tl); err != nil {
+		if err := storage.SaveTimeline(ctx, db, incident.ID, tl); err != nil {
 			log.Printf("failed to save timeline: %v", err)
 		} else {
 			log.Printf("timeline saved: %d events", len(tl))
 		}
 
-		if err := storage.SaveMetrics(c.Request.Context(), db, incident.ID, signals.Metrics); err != nil {
+		if err := storage.SaveMetrics(ctx, db, incident.ID, signals.Metrics); err != nil {
 			log.Printf("failed to save metrics: %v", err)
 		} else {
 			log.Printf("metrics saved for incident %d", incident.ID)
 		}
 
-		if err := storage.SaveLogs(c.Request.Context(), db, incident.ID, signals.Logs); err != nil {
+		if err := storage.SaveLogs(ctx, db, incident.ID, signals.Logs); err != nil {
 			log.Printf("failed to save logs: %v", err)
 		} else {
 			log.Printf("logs saved: %d entries", len(signals.Logs))
 		}
 
-		if err := storage.SaveKubernetesEvents(c.Request.Context(), db, incident.ID, signals.K8sEvents); err != nil {
+		if err := storage.SaveKubernetesEvents(ctx, db, incident.ID, signals.K8sEvents); err != nil {
 			log.Printf("failed to save Kubernetes events: %v", err)
 		} else {
 			log.Printf("Kubernetes events saved: %d entries", len(signals.K8sEvents))
+		}
+
+		// AI root-cause analysis based on timeline.
+		if ai.DefaultClient == nil {
+			log.Println("AI analysis skipped: Ollama client not configured")
+		} else {
+			rootCause, err := ai.DefaultClient.AnalyzeTimeline(tl)
+			if err != nil {
+				log.Printf("AI analysis failed: %v", err)
+			} else {
+				log.Printf("AI root cause: %s", rootCause)
+				if err := storage.SaveRootCause(ctx, db, incident.ID, rootCause); err != nil {
+					log.Printf("failed to save root cause: %v", err)
+				} else {
+					log.Printf("root cause saved for incident %d", incident.ID)
+				}
+
+				// Best-effort: generate + store embedding for the root-cause text.
+				vec, err := ai.GenerateEmbedding(ctx, ai.DefaultClient, rootCause)
+				if err != nil {
+					log.Printf("embedding generation failed: %v", err)
+				} else {
+					repo := storage.NewEmbeddingRepository(db)
+					emb := &models.IncidentEmbedding{
+						ID:         uuid.NewString(),
+						IncidentID: fmt.Sprintf("%d", incident.ID),
+						Embedding:  vec,
+					}
+					if err := repo.SaveEmbedding(ctx, emb); err != nil {
+						log.Printf("embedding save failed: %v", err)
+					} else {
+						log.Printf("embedding saved for incident %d", incident.ID)
+					}
+				}
+			}
 		}
 
 		// Log the human-readable incident timeline to stdout.
