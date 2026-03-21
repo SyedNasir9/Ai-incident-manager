@@ -3,14 +3,18 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/syednasir/ai-incident-manager/internal/ai"
 	"github.com/syednasir/ai-incident-manager/internal/alerts"
+	"github.com/syednasir/ai-incident-manager/internal/chatops"
 	"github.com/syednasir/ai-incident-manager/internal/config"
 	appLogger "github.com/syednasir/ai-incident-manager/internal/logger"
 	"github.com/syednasir/ai-incident-manager/internal/observability"
+	"github.com/syednasir/ai-incident-manager/internal/similarity"
 	"github.com/syednasir/ai-incident-manager/internal/storage"
 )
 
@@ -43,6 +47,13 @@ func main() {
 	)
 	observability.SetDefaultCollector(collector)
 
+	// Initialize Ollama AI client (used for RCA).
+	aiClient := ai.NewOllamaClient(
+		"http://localhost:11434",
+		"tinyllama",
+	)
+	ai.SetDefaultClient(aiClient)
+
 	// Connect to PostgreSQL using internal/storage.
 	pool, err := storage.NewPostgresPool()
 	if err != nil {
@@ -50,12 +61,73 @@ func main() {
 	}
 	defer pool.Close()
 
+	// Initialize embedding repository and similarity service (reuse DB pool).
+	embeddingRepo := storage.NewEmbeddingRepository(pool)
+	simSvc := similarity.NewSimilarityService(embeddingRepo)
+
 	// Set up Gin router.
 	router := gin.New()
 	router.Use(gin.Recovery())
 
 	// Register alert routes.
 	alerts.RegisterRoutes(router, pool)
+	// Register similar-incident routes.
+	alerts.RegisterSimilarRoutes(router, embeddingRepo, simSvc)
+
+	// Slack ChatOps service wiring.
+	chatops.SetSlackServices(chatops.SlackServices{
+		Timeline: func(c *gin.Context, incidentID string) (string, error) {
+			id, err := strconv.Atoi(incidentID)
+			if err != nil {
+				return "", fmt.Errorf("invalid incident_id %q", incidentID)
+			}
+			events, err := storage.GetTimelineEvents(c.Request.Context(), pool, id)
+			if err != nil {
+				return "", err
+			}
+			return chatops.FormatTimeline(events), nil
+		},
+		RootCause: func(c *gin.Context, incidentID string) (string, error) {
+			id, err := strconv.Atoi(incidentID)
+			if err != nil {
+				return "", fmt.Errorf("invalid incident_id %q", incidentID)
+			}
+			rc, err := storage.GetLatestRootCause(c.Request.Context(), pool, id)
+			if err != nil {
+				return "", err
+			}
+			return chatops.FormatRootCause(rc), nil
+		},
+		Similar: func(c *gin.Context, incidentID string) (string, error) {
+			emb, err := embeddingRepo.GetEmbeddingByIncidentID(c.Request.Context(), incidentID)
+			if err != nil {
+				return "", err
+			}
+			if emb == nil {
+				return "", fmt.Errorf("embedding not found for incident %q", incidentID)
+			}
+			similar, err := simSvc.FindSimilarIncidents(c.Request.Context(), incidentID, emb.Embedding, 5)
+			if err != nil {
+				return "", err
+			}
+			return chatops.FormatSimilarIncidents(similar), nil
+		},
+		Status: func(c *gin.Context, incidentID string) (string, error) {
+			id, err := strconv.Atoi(incidentID)
+			if err != nil {
+				return "", fmt.Errorf("invalid incident_id %q", incidentID)
+			}
+			status, err := storage.GetIncidentStatus(c.Request.Context(), pool, id)
+			if err != nil {
+				return "", err
+			}
+			if status == "" {
+				return "Status\n\n(not found)", nil
+			}
+			return "Status\n\n" + status, nil
+		},
+	})
+	router.POST("/slack/commands", chatops.HandleSlackCommand)
 
 	// Simple health endpoint.
 	router.GET("/health", func(c *gin.Context) {
