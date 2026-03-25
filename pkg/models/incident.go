@@ -9,4 +9,3 @@ type Incident struct {
 	StartTime time.Time `json:"start_time"`
 	Status    string    `json:"status"`
 }
-

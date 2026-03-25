@@ -8,4 +8,3 @@ import (
 func New() (*zap.Logger, error) {
 	return zap.NewProduction()
 }
-

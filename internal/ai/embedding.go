@@ -57,4 +57,3 @@ func GenerateEmbedding(ctx context.Context, client *OllamaClient, text string) (
 
 	return out.Embedding, nil
 }
-

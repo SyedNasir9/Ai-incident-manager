@@ -1,12 +1,16 @@
 package observability
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/syednasir/ai-incident-manager/internal/utils"
+	"go.uber.org/zap"
 )
 
 // MetricPoint represents a single Prometheus sample value with its timestamp.
@@ -19,37 +23,120 @@ type MetricPoint struct {
 type PrometheusClient struct {
 	baseURL    string
 	httpClient *http.Client
+	logger     *zap.Logger
 }
 
 // NewPrometheusClient creates a new client with the given base URL, e.g. "http://prometheus:9090".
 func NewPrometheusClient(baseURL string) *PrometheusClient {
+	logger, _ := zap.NewProduction()
+
 	return &PrometheusClient{
-		baseURL:    baseURL,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second, // Reasonable timeout for metrics queries
+		},
+		logger: logger,
 	}
 }
 
 // FetchCPUUsage fetches CPU usage metrics for the given service label.
 func (c *PrometheusClient) FetchCPUUsage(service string) ([]MetricPoint, error) {
-	// Example expression – adjust to match your metric names.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	expr := fmt.Sprintf(`rate(container_cpu_usage_seconds_total{service="%s"}[5m])`, service)
-	return c.queryInstant(expr)
+
+	retryConfig := utils.DefaultRetryConfig()
+	retryConfig.MaxAttempts = 2 // Quick retry for metrics
+
+	metrics, err := utils.RetryWithResult(ctx, retryConfig, func() ([]MetricPoint, error) {
+		if m, err := c.queryInstant(ctx, expr); err != nil {
+			c.logger.Warn("Failed to fetch CPU usage",
+				zap.Error(err),
+				zap.String("service", service))
+			return nil, fmt.Errorf("cpu usage fetch failed: %w", err)
+		}
+
+		c.logger.Debug("Fetched CPU usage",
+			zap.String("service", service),
+			zap.Int("points", len(m)))
+
+		return m, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return metrics, nil
 }
 
 // FetchMemoryUsage fetches memory usage metrics for the given service label.
 func (c *PrometheusClient) FetchMemoryUsage(service string) ([]MetricPoint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	expr := fmt.Sprintf(`container_memory_usage_bytes{service="%s"}`, service)
-	return c.queryInstant(expr)
+
+	retryConfig := utils.DefaultRetryConfig()
+	retryConfig.MaxAttempts = 2
+
+	metrics, err := utils.RetryWithResult(ctx, retryConfig, func() ([]MetricPoint, error) {
+		if m, err := c.queryInstant(ctx, expr); err != nil {
+			c.logger.Warn("Failed to fetch memory usage",
+				zap.Error(err),
+				zap.String("service", service))
+			return nil, fmt.Errorf("memory usage fetch failed: %w", err)
+		}
+
+		c.logger.Debug("Fetched memory usage",
+			zap.String("service", service),
+			zap.Int("points", len(metrics)))
+
+		return metrics, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return metrics, nil
 }
 
 // FetchErrorRate fetches error rate metrics for the given service label.
 func (c *PrometheusClient) FetchErrorRate(service string) ([]MetricPoint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	expr := fmt.Sprintf(`rate(http_requests_total{service="%s",status=~"5.."}[5m])`, service)
-	return c.queryInstant(expr)
+
+	retryConfig := utils.DefaultRetryConfig()
+	retryConfig.MaxAttempts = 2
+
+	metrics, err := utils.RetryWithResult(ctx, retryConfig, func() ([]MetricPoint, error) {
+		if m, err := c.queryInstant(ctx, expr); err != nil {
+			c.logger.Warn("Failed to fetch error rate",
+				zap.Error(err),
+				zap.String("service", service))
+			return nil, fmt.Errorf("error rate fetch failed: %w", err)
+		}
+
+		c.logger.Debug("Fetched error rate",
+			zap.String("service", service),
+			zap.Int("points", len(metrics)))
+
+		return metrics, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return metrics, nil
 }
 
 // queryInstant performs a /api/v1/query call and returns the resulting samples as MetricPoint values.
-func (c *PrometheusClient) queryInstant(expr string) ([]MetricPoint, error) {
+func (c *PrometheusClient) queryInstant(ctx context.Context, expr string) ([]MetricPoint, error) {
 	u, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse base URL: %w", err)
@@ -60,7 +147,7 @@ func (c *PrometheusClient) queryInstant(expr string) ([]MetricPoint, error) {
 	q.Set("query", expr)
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -116,11 +203,10 @@ type prometheusResponse struct {
 }
 
 type prometheusResult struct {
-	ResultType string                `json:"resultType"`
+	ResultType string                 `json:"resultType"`
 	Result     []prometheusResultItem `json:"result"`
 }
 
 type prometheusResultItem struct {
 	Value []interface{} `json:"value"`
 }
-

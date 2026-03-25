@@ -1,7 +1,10 @@
 ## Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
+
+# Allow the Go toolchain to auto-resolve the exact patch version specified in `go.mod`.
+ENV GOTOOLCHAIN=auto
 
 # Install build tools (if needed) and git for go modules
 RUN apk add --no-cache git
@@ -22,8 +25,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# Add CA certificates for HTTPS calls from the service
-RUN apk add --no-cache ca-certificates
+# Add CA certificates and curl for HTTPS calls and health checks
+RUN apk add --no-cache ca-certificates curl
 
 # Create non-root user
 RUN adduser -D -g '' appuser
@@ -32,7 +35,7 @@ RUN adduser -D -g '' appuser
 COPY --from=builder /app/server /app/server
 COPY configs /app/configs
 
-EXPOSE 8080
+EXPOSE 8081
 
 USER appuser
 

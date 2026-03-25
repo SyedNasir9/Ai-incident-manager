@@ -1,0 +1,21 @@
+# dependencies
+node_modules
+npm-debug.log*
+
+# Next.js
+.next
+out
+
+# local env (never bake secrets; use build-args for public URL)
+.env
+.env*.local
+
+# git / IDE
+.git
+.gitignore
+*.md
+.DS_Store
+
+# tests / tooling
+coverage
+.vscode

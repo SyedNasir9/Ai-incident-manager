@@ -13,13 +13,15 @@ type Command struct {
 // ParseCommand parses a Slack slash-command "text" string.
 //
 // Expected input:
-//   "<action> <incident_id>"
+//
+//	"<action> <incident_id>"
 //
 // Examples:
-//   "timeline 21"
-//   "rootcause 21"
-//   "similar 21"
-//   "status 21"
+//
+//	"timeline 21"
+//	"rootcause 21"
+//	"similar 21"
+//	"status 21"
 func ParseCommand(input string) (*Command, error) {
 	fields := strings.Fields(strings.TrimSpace(input))
 	if len(fields) < 2 {
@@ -45,4 +47,3 @@ func ParseCommand(input string) (*Command, error) {
 		IncidentID: incidentID,
 	}, nil
 }
-

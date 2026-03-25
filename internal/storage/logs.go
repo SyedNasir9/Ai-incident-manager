@@ -12,7 +12,8 @@ import (
 // incident_logs table.
 //
 // Expected columns:
-//   incident_id, timestamp, message
+//
+//	incident_id, timestamp, message
 func SaveLogs(ctx context.Context, db *pgxpool.Pool, incidentID int, logs []observability.LogEntry) error {
 	if len(logs) == 0 {
 		return nil
@@ -31,4 +32,3 @@ func SaveLogs(ctx context.Context, db *pgxpool.Pool, incidentID int, logs []obse
 
 	return nil
 }
-

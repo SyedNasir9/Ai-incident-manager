@@ -12,7 +12,8 @@ import (
 // in the incident_k8s_events table.
 //
 // Expected columns:
-//   incident_id, timestamp, reason, message
+//
+//	incident_id, timestamp, reason, message
 func SaveKubernetesEvents(ctx context.Context, db *pgxpool.Pool, incidentID int, events []observability.KubeEvent) error {
 	if len(events) == 0 {
 		return nil
@@ -31,4 +32,3 @@ func SaveKubernetesEvents(ctx context.Context, db *pgxpool.Pool, incidentID int,
 
 	return nil
 }
-

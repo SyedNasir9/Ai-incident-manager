@@ -30,4 +30,3 @@ func GetLatestRootCause(ctx context.Context, db *pgxpool.Pool, incidentID int) (
 
 	return rootCause, nil
 }
-

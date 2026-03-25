@@ -16,10 +16,10 @@ type CommitInfo struct {
 
 // PullRequestInfo represents a merged pull request.
 type PullRequestInfo struct {
-	Title     string    `json:"title"`
-	Author    string    `json:"author"`
-	MergedAt  time.Time `json:"merged_at"`
-	Number    int       `json:"number"`
+	Title    string    `json:"title"`
+	Author   string    `json:"author"`
+	MergedAt time.Time `json:"merged_at"`
+	Number   int       `json:"number"`
 }
 
 // GitHubClient is a minimal client for the GitHub REST API.
@@ -147,4 +147,3 @@ func (c *GitHubClient) addAuthHeaders(req *http.Request) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 }
-

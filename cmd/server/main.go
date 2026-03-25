@@ -3,15 +3,16 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/syednasir/ai-incident-manager/internal/ai"
 	"github.com/syednasir/ai-incident-manager/internal/alerts"
 	"github.com/syednasir/ai-incident-manager/internal/chatops"
 	"github.com/syednasir/ai-incident-manager/internal/config"
+	"github.com/syednasir/ai-incident-manager/internal/incidents"
 	appLogger "github.com/syednasir/ai-incident-manager/internal/logger"
 	"github.com/syednasir/ai-incident-manager/internal/observability"
 	"github.com/syednasir/ai-incident-manager/internal/similarity"
@@ -28,31 +29,34 @@ func main() {
 		_ = logger.Sync()
 	}()
 
-	// Load configuration using Viper.
+	// Load configuration using Viper (environment variables take precedence)
 	cfg, err := config.Load("configs/config.yaml")
 	if err != nil {
 		logger.Fatal("failed to load configuration", zap.Error(err))
 	}
 
 	// Initialize observability collector (Prometheus, Loki, etc.).
-	promClient := observability.NewPrometheusClient("http://localhost:9090")
-	lokiClient := observability.NewLokiClient("http://localhost:3100")
+	prometheusURL := os.Getenv("PROMETHEUS_URL")
+	if prometheusURL == "" {
+		prometheusURL = "http://localhost:9090" // fallback for local dev
+	}
+
+	lokiURL := os.Getenv("LOKI_URL")
+	if lokiURL == "" {
+		lokiURL = "http://localhost:3100" // fallback for local dev
+	}
+
+	promClient := observability.NewPrometheusClient(prometheusURL)
+	lokiClient := observability.NewLokiClient(lokiURL)
 
 	collector := observability.NewCollector(
 		promClient,
 		lokiClient,
-		nil, // Kubernetes client can be wired later
-		nil, // GitHub client can be wired later
-		"",  // namespace for Kubernetes events
+		nil,                         // Kubernetes client can be wired later
+		nil,                         // GitHub client can be wired later
+		cfg.Observability.Namespace, // namespace for Kubernetes events
 	)
 	observability.SetDefaultCollector(collector)
-
-	// Initialize Ollama AI client (used for RCA).
-	aiClient := ai.NewOllamaClient(
-		"http://localhost:11434",
-		"tinyllama",
-	)
-	ai.SetDefaultClient(aiClient)
 
 	// Connect to PostgreSQL using internal/storage.
 	pool, err := storage.NewPostgresPool()
@@ -69,8 +73,11 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	// Register alert routes.
-	alerts.RegisterRoutes(router, pool)
+	// Register HTTP routes.
+	alerts.RegisterRoutes(router, pool, logger)
+	incidents.RegisterListRoutes(router, pool, logger)
+	incidents.RegisterDetailRoutes(router, pool, logger)
+	incidents.RegisterEmbeddingRoutes(router, pool, logger)
 	// Register similar-incident routes.
 	alerts.RegisterSimilarRoutes(router, embeddingRepo, simSvc)
 
@@ -143,5 +150,3 @@ func main() {
 		logger.Fatal("server exited with error", zap.Error(err))
 	}
 }
-
-

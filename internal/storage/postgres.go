@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,6 +14,7 @@ import (
 
 // NewPostgresPool creates and returns a new pgx connection pool
 // using configuration loaded via Viper from configs/config.yaml.
+// It also runs database migrations if needed.
 func NewPostgresPool() (*pgxpool.Pool, error) {
 	// Configure Viper to read the application config.
 	v := viper.New()
@@ -27,6 +30,13 @@ func NewPostgresPool() (*pgxpool.Pool, error) {
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read database config: %w", err)
+	}
+
+	// Substitute environment variables in config values
+	for key, value := range v.AllSettings() {
+		if strValue, ok := value.(string); ok {
+			v.Set(key, substituteEnvVars(strValue))
+		}
 	}
 
 	type dbConfig struct {
@@ -84,6 +94,14 @@ func NewPostgresPool() (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
+	// Run database migrations
+	if err := RunMigrations(ctx, pool, "configs/sql"); err != nil {
+		logger.Error("failed to run database migrations", zap.Error(err))
+		pool.Close()
+		_ = logger.Sync()
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+
 	logger.Info("Postgres connection pool established successfully")
 	// We intentionally do not sync/close the logger here so it can continue
 	// to be used by the application if desired.
@@ -91,3 +109,19 @@ func NewPostgresPool() (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
+// substituteEnvVars replaces ${VAR:default} patterns with environment variables
+func substituteEnvVars(s string) string {
+	return os.Expand(s, func(key string) string {
+		// Handle ${VAR:default} format
+		if parts := strings.SplitN(key, ":", 2); len(parts) == 2 {
+			envKey := parts[0]
+			defaultValue := parts[1]
+			if envValue := os.Getenv(envKey); envValue != "" {
+				return envValue
+			}
+			return defaultValue
+		}
+		// Handle simple ${VAR} format
+		return os.Getenv(key)
+	})
+}

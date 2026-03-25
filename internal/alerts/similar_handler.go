@@ -48,4 +48,3 @@ func handleSimilarIncidents(
 		"similar_incidents": similar,
 	})
 }
-

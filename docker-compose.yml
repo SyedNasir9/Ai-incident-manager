@@ -1,0 +1,263 @@
+# AI Incident Manager - Complete Docker Stack
+# All services communicate via Docker DNS names, no localhost assumptions
+# One-command startup: docker-compose up --build
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-incident-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: incidentdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./configs/sql:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d incidentdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ai-incident-network
+
+  # Ollama AI service for embeddings and analysis
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-incident-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - ai-incident-network
+
+  # Backend API service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-incident-api
+    ports:
+      - "8081:8081"
+    environment:
+      # Database configuration (uses service names)
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_DBNAME: incidentdb
+      DATABASE_SSLMODE: disable
+      
+      # AI service configuration (uses service names)
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: tinyllama
+      
+      # Observability configuration (uses service names)
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      
+      # Grafana annotations (optional)
+      GRAFANA_ANNOTATIONS_ENABLED: "false"
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_API_KEY: ""
+      
+      # Server configuration
+      GIN_MODE: release
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - ai-incident-network
+
+  # Frontend Next.js application
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # API communication via service names
+        NEXT_PUBLIC_API_URL: /api/backend
+        BACKEND_INTERNAL_URL: http://api:8081
+        # Grafana configuration
+        NEXT_PUBLIC_GRAFANA_DASHBOARD_URL: http://localhost:3001
+    container_name: ai-incident-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ai-incident-network
+
+  # Prometheus metrics collection
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: ai-incident-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-incident-network
+
+  # Loki log aggregation
+  loki:
+    image: grafana/loki:2.8.0
+    container_name: ai-incident-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/var/lib/loki
+    command:
+      - "--config.file=/etc/loki/config.yaml"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-incident-network
+
+  # Promtail log collection
+  promtail:
+    image: grafana/promtail:2.8.0
+    container_name: ai-incident-promtail
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - "--config.file=/etc/promtail/config.yml"
+    restart: unless-stopped
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - ai-incident-network
+
+  # Grafana visualization
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: ai-incident-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_SERVER_DOMAIN: "localhost"
+      GF_SERVER_ROOT_URL: "http://localhost:3001"
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-incident-network
+
+  # Model initialization service (pulls Ollama models)
+  model-init:
+    image: ollama/ollama:latest
+    container_name: ai-incident-model-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    command: >
+      sh -c "
+      echo 'Waiting for Ollama to be ready...';
+      ollama list;
+      echo 'Pulling TinyLlama model...';
+      ollama pull tinyllama;
+      echo 'Model pull complete';
+      ollama list;
+      "
+    restart: "no"
+    networks:
+      - ai-incident-network
+
+# Network configuration
+networks:
+  ai-incident-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Persistent volumes
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  loki_data:
+    driver: local
+  grafana_data:
+    driver: local

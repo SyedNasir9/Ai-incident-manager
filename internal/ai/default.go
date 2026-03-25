@@ -8,4 +8,3 @@ var DefaultClient *OllamaClient
 func SetDefaultClient(c *OllamaClient) {
 	DefaultClient = c
 }
-

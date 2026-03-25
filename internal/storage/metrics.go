@@ -12,17 +12,18 @@ import (
 // a specific incident into the incident_metrics table.
 //
 // Expected columns:
-//   incident_id, metric_type, value, timestamp
+//
+//	incident_id, metric_name, metric_value, timestamp, labels
 func SaveMetrics(ctx context.Context, db *pgxpool.Pool, incidentID int, metrics observability.Metrics) error {
 	const query = `
-		INSERT INTO incident_metrics (incident_id, metric_type, value, timestamp)
-		VALUES ($1, $2, $3, $4);
+		INSERT INTO incident_metrics (incident_id, metric_name, metric_value, timestamp, labels)
+		VALUES ($1, $2, $3, $4, $5);
 	`
 
 	// Helper to insert a slice of MetricPoint with the given metricType label.
 	insertPoints := func(metricType string, points []observability.MetricPoint) error {
 		for _, pt := range points {
-			if _, err := db.Exec(ctx, query, incidentID, metricType, pt.Value, pt.Timestamp); err != nil {
+			if _, err := db.Exec(ctx, query, incidentID, metricType, pt.Value, pt.Timestamp, nil); err != nil {
 				return err
 			}
 		}
@@ -41,4 +42,3 @@ func SaveMetrics(ctx context.Context, db *pgxpool.Pool, incidentID int, metrics 
 
 	return nil
 }
-

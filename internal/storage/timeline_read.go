@@ -38,4 +38,3 @@ func GetTimelineEvents(ctx context.Context, db *pgxpool.Pool, incidentID int) ([
 
 	return events, nil
 }
-

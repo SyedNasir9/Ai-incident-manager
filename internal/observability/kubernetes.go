@@ -89,4 +89,3 @@ func isInterestingEvent(e *corev1.Event) bool {
 
 	return false
 }
-

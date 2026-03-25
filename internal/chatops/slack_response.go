@@ -124,4 +124,3 @@ func BuildSlackBlocks(action, incidentID, msg string) []map[string]any {
 
 	return blocks
 }
-

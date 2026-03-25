@@ -30,4 +30,3 @@ func CreateIncident(ctx context.Context, db *pgxpool.Pool, incident models.Incid
 
 	return id, nil
 }
-

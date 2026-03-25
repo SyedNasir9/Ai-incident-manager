@@ -1,9 +1,33 @@
+# AI Incident Manager Configuration
+# This file contains default configuration values
+# Environment variables (AI_INCIDENT_*) will override these values
+
 server:
   port: 8081
+  mode: release
 
 database:
-  host: localhost
-  port: 5432
-  user: postgres
-  password: "starnasir9"
-  dbname: incidentdb
+  host: ${AI_INCIDENT_DATABASE_HOST:localhost}
+  port: ${AI_INCIDENT_DATABASE_PORT:5432}
+  user: ${AI_INCIDENT_DATABASE_USER:postgres}
+  password: ${AI_INCIDENT_DATABASE_PASSWORD:postgres}
+  dbname: ${AI_INCIDENT_DATABASE_NAME:incidentdb}
+  sslmode: ${AI_INCIDENT_DATABASE_SSLMODE:disable}
+
+ai:
+  ollama_url: ${AI_INCIDENT_AI_OLLAMA_URL:http://localhost:11434}
+  model: ${AI_INCIDENT_AI_MODEL:tinyllama}
+
+observability:
+  prometheus_url: ${AI_INCIDENT_OBSERVABILITY_PROMETHEUS_URL:http://localhost:9090}
+  loki_url: ${AI_INCIDENT_OBSERVABILITY_LOKI_URL:http://localhost:3100}
+  grafana_url: ${AI_INCIDENT_OBSERVABILITY_GRAFANA_URL:http://localhost:3001}
+  grafana_api_key: ${AI_INCIDENT_OBSERVABILITY_GRAFANA_API_KEY:}
+  namespace: ${AI_INCIDENT_OBSERVABILITY_NAMESPACE:ai-incident-manager}
+
+security:
+  jwt_secret: ${AI_INCIDENT_SECURITY_JWT_SECRET:dev-jwt-secret}
+  session_secret: ${AI_INCIDENT_SECURITY_SESSION_SECRET:dev-session-secret}
+
+cors:
+  origins: ${AI_INCIDENT_CORS_ORIGINS:http://localhost:3000,http://localhost:8081}

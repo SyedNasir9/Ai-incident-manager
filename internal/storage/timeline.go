@@ -12,7 +12,8 @@ import (
 // timeline_events table.
 //
 // Expected table schema (conceptual):
-//   timeline_events(incident_id, timestamp, source, message)
+//
+//	timeline_events(incident_id, timestamp, source, message)
 func SaveTimeline(ctx context.Context, db *pgxpool.Pool, incidentID int, events []models.TimelineEvent) error {
 	if len(events) == 0 {
 		return nil
@@ -31,4 +32,3 @@ func SaveTimeline(ctx context.Context, db *pgxpool.Pool, incidentID int, events 
 
 	return nil
 }
-

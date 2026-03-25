@@ -21,7 +21,7 @@ func AnalyzeAndStoreRootCause(
 	ctx context.Context,
 	client *OllamaClient,
 	repo *storage.EmbeddingRepository,
-	incidentID string,
+	incidentID int, // Changed from string to int
 	timeline []models.TimelineEvent,
 ) (string, error) {
 	if client == nil {
@@ -37,25 +37,24 @@ func AnalyzeAndStoreRootCause(
 	// 2. Best-effort embedding generation + persistence for similarity search.
 	// Failures here should NOT break the incident pipeline.
 	if repo == nil {
-		log.Printf("embedding storage skipped: embedding repository is nil (incident_id=%s)", incidentID)
+		log.Printf("embedding storage skipped: embedding repository is nil (incident_id=%d)", incidentID)
 	} else {
 		vec, err := GenerateEmbedding(ctx, client, rootCause)
 		if err != nil {
-			log.Printf("embedding generation failed (incident_id=%s): %v", incidentID, err)
+			log.Printf("embedding generation failed (incident_id=%d): %v", incidentID, err)
 		} else {
 			embedding := &models.IncidentEmbedding{
 				ID:         uuid.NewString(),
-				IncidentID: incidentID,
+				IncidentID: incidentID, // Now using int directly
 				Embedding:  vec,
 				CreatedAt:  time.Now(),
 			}
 
 			if err := repo.SaveEmbedding(ctx, embedding); err != nil {
-				log.Printf("embedding save failed (incident_id=%s): %v", incidentID, err)
+				log.Printf("embedding save failed (incident_id=%d): %v", incidentID, err)
 			}
 		}
 	}
 
 	return rootCause, nil
 }
-

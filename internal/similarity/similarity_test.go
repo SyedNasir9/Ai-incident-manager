@@ -85,4 +85,3 @@ func TestSimilarityService_FindSimilarIncidents(t *testing.T) {
 		t.Fatalf("expected top similar incident to be %q, got %q", e2.IncidentID, sims[0].IncidentID)
 	}
 }
-

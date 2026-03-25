@@ -27,11 +27,13 @@ func SetSlackServices(s SlackServices) {
 // HandleSlackCommand handles Slack slash command requests (application/x-www-form-urlencoded).
 //
 // It expects fields like:
-//   command=/incident
-//   text="timeline 21"
+//
+//	command=/incident
+//	text="timeline 21"
 //
 // Responds with a Slack-compatible JSON payload:
-//   {"response_type":"in_channel","text":"..."}
+//
+//	{"response_type":"in_channel","text":"..."}
 func HandleSlackCommand(c *gin.Context) {
 	command := c.PostForm("command")
 	text := c.PostForm("text")
@@ -120,4 +122,3 @@ func HandleSlackCommand(c *gin.Context) {
 		"blocks":        BuildSlackBlocks(parsed.Action, parsed.IncidentID, msg),
 	})
 }
-

@@ -63,4 +63,3 @@ func (s *SimilarityService) FindSimilarIncidents(
 
 	return sims, nil
 }
-
