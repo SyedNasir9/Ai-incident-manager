@@ -19,23 +19,23 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                 Frontend (Next.js)                  │
 │                     │                               │
-│                 ↓ API Calls                        │
+│                 ↓ API Calls                         │
 │                     │                               │
-│              Backend (Go Gin)                   │
+│              Backend (Go Gin)                       │
 │                     │                               │
-│    ┌────────────┬────────────┬────────────┐    │
-│    │ PostgreSQL │   Ollama AI │    │
-│    │ (pgvector) │   (Embeddings) │    │
-│    └────────────┴────────────┴────────────┘    │
+│    ┌────────────┬────────────┬────────────┐         │
+│    │ PostgreSQL │   Ollama AI             │         │
+│    │ (pgvector) │   (Embeddings           │         │
+│    └────────────┴────────────┴────────────┘         │
 │                     │                               │
-│              Observability Stack                  │
-│    ┌────────────┬────────────┬────────────┐    │
-│    │ Prometheus │     Loki      │    │
-│    │ (Metrics)  │   (Logs)     │    │
-│    └────────────┴────────────┴────────────┘    │
+│              Observability Stack                    │
+│    ┌────────────┬────────────┬────────────┐         │
+│    │ Prometheus │     Loki                │         │
+│    │ (Metrics)  │   (Logs)                │         │
+│    └────────────┴────────────┴────────────┘         │
 │                     │                               │
-│                 Grafana Dashboard                │
-│              (Visualization)                   │
+│                 Grafana Dashboard                   │
+│              (Visualization)                        │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -86,7 +86,7 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/syednasir/ai-incident-manager.git
+git clone https://github.com/syednasir9/ai-incident-manager.git
 cd ai-incident-manager
 
 # 2. Set up environment variables
@@ -149,19 +149,11 @@ docker-compose -f docker-compose.production.yml up --build --watch
 
 ## 🔮 Future Improvements
 
-### Short Term
 - [ ] **Multi-Model Support**: Support for multiple AI models (GPT, Claude, etc.)
 - [ ] **Advanced Filtering**: Enhanced incident filtering and search capabilities
 - [ ] **Real-time Updates**: WebSocket integration for live incident updates
 - [ ] **Mobile App**: Native mobile application for incident management
 - [ ] **SLA Tracking**: Service level agreement monitoring and reporting
-
-### Long Term
-- [ ] **Machine Learning**: Custom model training for organization-specific patterns
-- [ ] **Integration Hub**: Connect with external monitoring systems (DataDog, New Relic)
-- [ ] **Automated Remediation**: Suggested resolution actions based on historical data
-- [ ] **Multi-tenant Support**: Organization and tenant isolation
-- [ ] **Advanced Analytics**: Predictive incident analysis and trend detection
 
 ## 📄 Documentation
 
